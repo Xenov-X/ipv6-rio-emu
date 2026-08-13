@@ -1,10 +1,24 @@
 services:
   rio-agent:
-    build: .
+    image: ghcr.io/xenov_x/rio-agent:latest
+    # Production: pin the digest so a NAS reboot can't pull a surprise.
+    # image: ghcr.io/YOUR_OWNER/rio-agent@sha256:<digest from the job summary>
+    container_name: rio-agent
     network_mode: host
     cap_add: [NET_ADMIN, NET_RAW]
     restart: unless-stopped
     environment:
-      IFACE: eth0
+      IFACE: eth0            # bond0 with LAG, ovs_eth0 if VMM is installed
       MAX_PLEN: "64"
+      MIN_PLEN: "0"
+      ALLOW_DEFAULT: "0"
       RS_INTERVAL: "300"
+      REASSERT_INTERVAL: "30"
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f rio-agent.py >/dev/null"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
