@@ -1,0 +1,10 @@
+services:
+  rio-agent:
+    build: .
+    network_mode: host
+    cap_add: [NET_ADMIN, NET_RAW]
+    restart: unless-stopped
+    environment:
+      IFACE: eth0
+      MAX_PLEN: "64"
+      RS_INTERVAL: "300"
