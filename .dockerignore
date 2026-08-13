@@ -1,4 +1,4 @@
 .git
 .github
-compose.yaml
+docker-compose*.yaml
 README*
