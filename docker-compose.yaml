@@ -1,6 +1,6 @@
 services:
   rio-agent:
-    image: ghcr.io/xenov_x/rio-agent:latest
+    image: ghcr.io/xenov-x/rio-agent:latest
     # Production: pin the digest so a NAS reboot can't pull a surprise.
     # image: ghcr.io/YOUR_OWNER/rio-agent@sha256:<digest from the job summary>
     container_name: rio-agent
