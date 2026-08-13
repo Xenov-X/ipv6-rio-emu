@@ -85,7 +85,7 @@ jobs:
         run: |
           docker run --rm --entrypoint python3 \
             ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:sha-${{ github.sha }} \
-            -c 'from scapy.all import ICMPv6NDOptRouteInfo; import subprocess; subprocess.run(["ip", "-V"], check=True); print("ok")'
+            -c 'import subprocess; from scapy.all import sniff, ICMPv6NDOptRouteInfo; subprocess.run(["ip", "-V"], check=True); sniff(iface="lo", filter="icmp6", timeout=1, store=False); print("ok")'
 
       - uses: actions/attest-build-provenance@v1
         if: github.event_name != 'pull_request'

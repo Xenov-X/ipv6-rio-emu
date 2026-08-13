@@ -12,7 +12,8 @@ REASSERT  = int(os.environ.get("REASSERT_INTERVAL", "30"))
 # RFC 4191 prf: 1=high, 0=medium, 3=low(-1)
 METRIC    = {1: 1024, 0: 2048, 3: 4096}
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+                    format="%(asctime)s %(message)s")
 log = logging.getLogger("rio")
 routes, lock = {}, threading.Lock()   # (prefix, via) -> {"metric":int, "expires":float|None}
 
@@ -31,6 +32,13 @@ def remove(prefix, via, metric):
     ip("del", prefix, "via", via, "dev", IFACE, "metric", str(metric))
 
 def handle(pkt):
+    # A dissection failure on one packet must not take down the capture thread.
+    try:
+        handle_ra(pkt)
+    except Exception as e:
+        log.warning("error handling RA: %s", e)
+
+def handle_ra(pkt):
     src = pkt[IPv6].src
     if not src.lower().startswith("fe80"):
         log.debug("ignoring RA from non-link-local %s", src)
@@ -88,9 +96,24 @@ def maintain():
 if __name__ == "__main__":
     if not os.path.exists(f"/sys/class/net/{IFACE}"):
         sys.exit(f"interface {IFACE} not present (host networking? ovs_eth0?)")
-    AsyncSniffer(iface=IFACE, filter="icmp6",
-                 lfilter=lambda p: ICMPv6ND_RA in p, prn=handle,
-                 store=False).start()
+    sniffer = AsyncSniffer(iface=IFACE, filter="icmp6",
+                           lfilter=lambda p: ICMPv6ND_RA in p, prn=handle,
+                           store=False)
+    sniffer.start()
+    # AsyncSniffer.start() returns before the capture thread has set up its
+    # socket, and .running stays True even once that thread is dead, so poll
+    # the thread itself. Without this a missing libpcap (or any BPF compile
+    # failure) is completely silent: no logs, no routes, process still alive.
+    time.sleep(1)
+    if not (sniffer.thread and sniffer.thread.is_alive()):
+        sys.exit(f"capture thread died starting up on {IFACE} "
+                 "(libpcap missing, or filter unsupported)")
+    log.info("watching %s max_plen=%d min_plen=%d allow_default=%s "
+             "rs_interval=%d reassert_interval=%d",
+             IFACE, MAX_PLEN, MIN_PLEN, ALLOW_DEF, RS_EVERY, REASSERT)
     threading.Thread(target=solicit,  daemon=True).start()
     threading.Thread(target=maintain, daemon=True).start()
-    while True: time.sleep(3600)
+    while True:
+        time.sleep(REASSERT)
+        if not sniffer.thread.is_alive():
+            sys.exit(f"capture thread on {IFACE} died; exiting for restart")
